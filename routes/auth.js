@@ -1,58 +1,41 @@
 const router = require("express").Router();
 const User = require("../models/User");
-const CryptoJS = require("crypto-js");
 const jwt = require("jsonwebtoken");
+const bcrypt = require('bcrypt')
 
 //REGISTER
-router.post("/register", async (req, res) => {
-  const newUser = new User({
-    username: req.body.username,
-    email: req.body.email,
-    password: CryptoJS.AES.encrypt(
-      req.body.password,
-      process.env.PASS_SEC
-    ).toString(),
-  });
-
+router.post('/register', async (req, res) => {
   try {
-    const savedUser = await newUser.save();
-    res.status(201).json(savedUser);
-  } catch (err) {
-    res.status(500).json(err);
+      const { username, email, password } = req.body;
+      const hashed = await bcrypt.hash(password, 12)
+      const newUser = new User({
+          username,
+          email,
+          password: hashed
+      })
+      const user = await newUser.save()
+      res.status(201).json(user)
+  } catch (error) {
+      res.status(401).json(error.mesage)
   }
-});
+})
 
-//LOGIN
+// LOGIN
 
-router.post("/login", async (req, res) => {
+router.post('/login', async (req, res) => {
   try {
-    const user = await User.findOne({ username: req.body.username });
-    !user && res.status(401).json("Wrong credentials!");
-
-    const hashedPassword = CryptoJS.AES.decrypt(
-      user.password,
-      process.env.PASS_SEC
-    );
-    const OriginalPassword = hashedPassword.toString(CryptoJS.enc.Utf8);
-
-    OriginalPassword !== req.body.password &&
-      res.status(401).json("Wrong credentials!");
-
-    const accessToken = jwt.sign(
-      {
-        id: user._id,
-        isAdmin: user.isAdmin,
-      },
-      process.env.JWT_SEC,
-      {expiresIn:"3d"}
-    );
-
-    const { password, ...others } = user._doc;
-
-    res.status(200).json({...others, accessToken});
-  } catch (err) {
-    res.status(500).json(err);
+      const userExists = await User.findOne({ email: req.body.email })
+      !userExists && res.status(400).json("User Not Exists")
+      const pass = await bcrypt.compare(req.body.password, userExists.password)
+      if (!pass) {
+          res.status(401).json("Incorrect email or Password")
+      }
+      const { password, ...others } = userExists._doc;
+      res.status(201).json(others)
+  } catch (error) {
+      res.status(401).json(error.mesage)
   }
-});
+})
+
 
 module.exports = router;
